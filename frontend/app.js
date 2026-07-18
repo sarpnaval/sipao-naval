@@ -9,6 +9,56 @@
 (function () {
 "use strict";
 
+/* ==================================================================
+   Clave de operación (solo en la instancia publicada)
+   ------------------------------------------------------------------
+   En el servidor, la CONSULTA es libre y la ESCRITURA exige la clave
+   de operación (ver backend/app/seguridad.py). En local no hay clave
+   configurada y esto no se activa nunca: el comportamiento es idéntico
+   al de siempre.
+
+   Se envuelve `fetch` una sola vez, en lugar de tocar cada llamada:
+   así queda cubierta toda escritura —incluidas las que se añadan
+   después— sin que nadie tenga que acordarse de hacerlo. Si el
+   servidor responde 401, se pide la clave, se guarda en el navegador
+   y se reintenta la MISMA petición una vez.
+   ================================================================== */
+const CLAVE_LS = "sipao_clave_operacion";
+const SIN_CUERPO = { GET: 1, HEAD: 1, OPTIONS: 1 };
+
+(function instalarClaveDeOperacion() {
+  const original = window.fetch.bind(window);
+  window.fetch = async function (entrada, opciones) {
+    opciones = opciones || {};
+    const metodo = (opciones.method || "GET").toUpperCase();
+    if (SIN_CUERPO[metodo]) return original(entrada, opciones);
+
+    const conClave = clave => {
+      if (!clave) return opciones;
+      const cab = new Headers(opciones.headers || {});
+      cab.set("X-Sipao-Token", clave);
+      return Object.assign({}, opciones, { headers: cab });
+    };
+
+    let respuesta = await original(entrada, conClave(localStorage.getItem(CLAVE_LS)));
+    if (respuesta.status !== 401) return respuesta;
+
+    const clave = window.prompt(
+      "Esta plataforma está publicada en internet: la consulta es libre, " +
+      "pero para GUARDAR cambios se necesita la clave de operación.\n\n" +
+      "Ingrésela una sola vez; el navegador la recordará.");
+    if (!clave) return respuesta;
+    localStorage.setItem(CLAVE_LS, clave.trim());
+
+    respuesta = await original(entrada, conClave(clave.trim()));
+    if (respuesta.status === 401) {
+      localStorage.removeItem(CLAVE_LS);   // no dejar una clave errada guardada
+      alert("La clave de operación no es correcta. La consulta sigue disponible.");
+    }
+    return respuesta;
+  };
+})();
+
 const $ = s => document.querySelector(s);
 const fmt$ = n => "$" + Math.round(n || 0).toLocaleString("es-EC");
 const fmtN = n => (Math.round((n || 0) * 10) / 10).toLocaleString("es-EC");
