@@ -32,7 +32,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.app import config_persistente, respaldo
+from backend.app import config_persistente, respaldo, seguridad
 from backend.app.db import obtener_bd
 from backend.motor import costeo
 
@@ -136,6 +136,12 @@ def leer_configuracion():
         "origenes": list(ORIGENES),
         "indicadores": _indicadores(),
         "madurez": _madurez(),
+        # Estado del respaldo automático. Antes solo se veía DESPUÉS de
+        # guardar, que es tarde: quien va a cargar datos necesita saber
+        # ANTES si lo que escriba sobrevivirá al reinicio de la instancia.
+        "respaldo": respaldo.estado(),
+        # Si la instancia exige clave para escribir (publicada) o no (local).
+        "escritura_protegida": seguridad.escritura_protegida(),
     }
 
 
