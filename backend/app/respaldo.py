@@ -64,6 +64,32 @@ def _api():
     return HfApi(token=os.environ[VARIABLE_TOKEN].strip())
 
 
+def _tiene_datos(ruta_bd):
+    """¿La base ya contiene un catálogo real?
+
+    Se pregunta a la BASE, no al archivo. El criterio anterior miraba el
+    TAMAÑO (>40 kB = "tiene datos") y era falso: el arranque crea la base
+    y aplica el esquema ANTES de intentar restaurar, y una base recién
+    creada, con cero filas, ya pesa 110 kB. Resultado: la restauración se
+    saltaba siempre, en silencio, y cada reinicio del servidor empezaba
+    de cero mientras el respaldo parecía estar funcionando (18-jul-2026).
+    """
+    ruta_bd = Path(ruta_bd)
+    if not ruta_bd.exists():
+        return False
+    import sqlite3
+    try:
+        conexion = sqlite3.connect(str(ruta_bd))
+        try:
+            fila = conexion.execute("SELECT COUNT(*) FROM items").fetchone()
+            return bool(fila and fila[0] > 0)
+        finally:
+            conexion.close()
+    except Exception:
+        # Sin tabla `items` o archivo ilegible: no hay nada que proteger.
+        return False
+
+
 def restaurar_si_procede(ruta_bd):
     """Descarga la última instantánea si la base local está vacía o no existe.
 
@@ -73,8 +99,8 @@ def restaurar_si_procede(ruta_bd):
     if not _configurado():
         return False
     ruta_bd = Path(ruta_bd)
-    # si ya hay una base con contenido real, no la pisamos
-    if ruta_bd.exists() and ruta_bd.stat().st_size > 40_000:
+    if _tiene_datos(ruta_bd):
+        print("  La base ya tiene datos: no se restaura (se respeta lo cargado).")
         return False
     try:
         from huggingface_hub import hf_hub_download
@@ -85,9 +111,17 @@ def restaurar_si_procede(ruta_bd):
             token=os.environ[VARIABLE_TOKEN].strip())
         ruta_bd.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(descargado, ruta_bd)
+        print(f"  Instantánea descargada de {os.environ[VARIABLE_REPO].strip()}.")
         return True
     except Exception as e:
-        print(f"  (no había instantánea previa que restaurar: {type(e).__name__})")
+        # Se distingue "todavía no hay instantánea" (primer arranque, normal)
+        # de "no se pudo bajar" (credencial mala, repositorio equivocado, red):
+        # confundirlos fue lo que escondió el defecto del criterio por tamaño.
+        nombre = type(e).__name__
+        if "EntryNotFound" in nombre or "RepositoryNotFound" in nombre:
+            print("  Todavía no hay instantánea que restaurar (primer arranque).")
+        else:
+            print(f"  ⚠ NO SE PUDO restaurar la instantánea: {nombre}: {e}")
         return False
 
 
