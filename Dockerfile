@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+# `scripts/` NO es accesorio: la siembra del catálogo referencial pasa por
+# scripts/generar_dataset_realista.py, igual que en local. Sin él, el
+# arranque falla con ModuleNotFoundError (ocurrió el 18-jul-2026).
+COPY scripts/ ./scripts/
 
 # La base vive en un directorio propio para poder respaldarla y restaurarla
 # como una sola pieza (el archivo .db pesa menos de 1 MB).
