@@ -45,7 +45,21 @@ import math
 import random
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[3]
+def _raiz_del_proyecto():
+    """Raíz del proyecto, o el directorio del script si no cuelga de ella.
+
+    Solo sirve para DECIDIR DÓNDE ESCRIBIR los CSV cuando este archivo se
+    ejecuta a mano. Dentro del contenedor publicado el módulo se IMPORTA
+    (la siembra usa construir_archivos(), que trabaja en memoria) y vive
+    en /app/scripts/, donde no existen cuatro niveles por encima: asumirlo
+    reventaba el arranque con IndexError (18-jul-2026). Sin ruta válida no
+    hay nada que escribir, así que basta con no fallar al importar.
+    """
+    aqui = Path(__file__).resolve()
+    return aqui.parents[3] if len(aqui.parents) > 3 else aqui.parent
+
+
+RAIZ = _raiz_del_proyecto()
 DIR_SALIDA = RAIZ / "03-datos" / "simulado" / "efla_guardacostas"
 
 SEMILLA = 20260711

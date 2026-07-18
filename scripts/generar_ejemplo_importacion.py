@@ -22,7 +22,12 @@ import csv
 import random
 from pathlib import Path
 
-RAIZ = Path(__file__).resolve().parents[3]
+# Igual que en generar_dataset_realista: la raíz solo sirve para saber
+# dónde escribir al ejecutar el script a mano. En el contenedor este
+# archivo vive en /app/scripts/, sin cuatro niveles por encima, y dar por
+# hecho que existen rompía el arranque al importar el paquete.
+_AQUI = Path(__file__).resolve()
+RAIZ = _AQUI.parents[3] if len(_AQUI.parents) > 3 else _AQUI.parent
 DIR_PLANTILLAS = RAIZ / "03-datos" / "plantillas"
 DIR_EJEMPLO = DIR_PLANTILLAS / "ejemplo_sintetico"
 
