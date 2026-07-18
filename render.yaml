@@ -1,0 +1,31 @@
+# SIPAO-Naval — definición del servicio en Render.
+# Con este archivo el despliegue es reproducible: si hay que recrear el
+# servicio (o levantarlo en otra cuenta), Render lee esta definición y no
+# hay que recordar la configuración.
+services:
+  - type: web
+    name: sipao-naval
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    branch: main
+    # Render inyecta $PORT; el Dockerfile ya lo respeta.
+    healthCheckPath: /api/salud
+    autoDeployTrigger: commit
+    envVars:
+      # Ruta de la base dentro del contenedor (disco efímero: por eso el respaldo).
+      - key: SARP_BD
+        value: /app/datos/sipao.db
+      - key: TZ
+        value: America/Guayaquil
+      # Clave de operación para ESCRIBIR (configuración, importación, registro).
+      # La consulta queda libre. Render la genera y la guarda cifrada.
+      - key: SIPAO_TOKEN_ESCRITURA
+        generateValue: true
+      # Respaldo automático de la base en el repositorio privado de respaldo.
+      # sync:false => Render la pide al desplegar y NO queda en el repositorio.
+      - key: HF_TOKEN
+        sync: false
+      - key: SIPAO_REPO_RESPALDO
+        value: SarpNaval/sipao-datos
