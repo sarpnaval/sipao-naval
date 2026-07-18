@@ -6,7 +6,7 @@
    ===================================================================== */
 "use strict";
 
-const VERSION = "sipao-v2.1.0";  // v2.1: clave de operación para escribir en la instancia publicada
+const VERSION = "sipao-v2.2.0";  // v2.2: la portada es el tablero de comando, no la cola de repuestos
 const SHELL_CACHE = "sarp-shell-" + VERSION;
 const API_CACHE = "sarp-api-" + VERSION;
 

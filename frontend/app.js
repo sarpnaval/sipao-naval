@@ -70,7 +70,11 @@ const CC = { navy: "#13315c", gold: "#c6a441", grid: "#e4eaf2", red: "#b3261e", 
 
 // Estado en memoria (se llena del backend o del snapshot)
 const S = { salud: null, kpis: null, items: [], alertas: [], plantilla: null, detalles: new Map(), offline: false, mando: null };
-let ROL = localStorage.getItem("sarp_rol") || "operador";
+// Quien abre la plataforma por primera vez entra al TABLERO DE COMANDO,
+// no a la cola de repuestos del almacenista: SIPAO-Naval es un sistema de
+// decisión de mando, y el listado de ítems es uno de sus módulos, no su
+// portada. Si el usuario elige otra vista, se respeta su elección.
+let ROL = localStorage.getItem("sarp_rol") || "ejecutivo";
 
 /* ==================================================================
    IndexedDB: snapshot offline (kv) + detalles por ítem
