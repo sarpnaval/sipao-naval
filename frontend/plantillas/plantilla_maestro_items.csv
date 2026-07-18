@@ -1,0 +1,3 @@
+codigo,nombre,categoria,unidad,costo_unitario_usd,criticidad,lead_time_dias,importado,proveedor
+"# EJEMPLO (borre las filas '#'): REP-0001, Filtro combustible, Motor F/B, u, 38.50, V, 45, S, Proveedor S.A.",,,,,,,,
+# criticidad: V/E/D · importado: S/N · costo>0 · lead_time_dias entero>0,,,,,,,,

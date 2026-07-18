@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SARP-Naval · Resumen ejecutivo</title>
+<link rel="icon" href="icons/icono-192.png" type="image/png">
+<style>
+:root{--navy:#0b2545;--navy2:#13315c;--gold:#c6a441;--ink:#16233a;--mut:#5b6b83;--line:#dde5ef;--bad:#b3261e;--ok:#1e7d4f;--warn:#a86a00;--exc:#5b4ea8;
+  --badbg:#fbe4e2;--okbg:#e2f3ea;--warnbg:#fdf1dc;--excbg:#ece9fa}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:#eef2f7;padding:24px}
+.sheet{max-width:900px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:32px 36px;box-shadow:0 3px 14px rgba(11,37,69,.10)}
+.head{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--navy);padding-bottom:14px}
+.crest{width:54px;height:54px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--gold);flex:none}
+.head h1{font-size:19px;letter-spacing:.05em;color:var(--navy)}.head h1 span{color:var(--gold)}
+.head p{font-size:12px;color:var(--mut);margin-top:2px}
+.doc{font-size:13px;font-weight:700;color:var(--navy);text-align:right;flex:1}
+.meta{font-size:12.5px;color:#22304a;margin:14px 0 18px}.meta b{color:var(--navy)}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);margin:20px 0 10px}
+.kgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-top:3px solid var(--navy)}
+.kpi.ok{border-top-color:var(--ok)}.kpi.bad{border-top-color:var(--bad)}.kpi.gold{border-top-color:var(--gold)}.kpi.exc{border-top-color:var(--exc)}
+.kpi .v{font-size:22px;font-weight:800}.kpi .l{font-size:10.5px;color:var(--mut);text-transform:uppercase;margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{background:var(--navy);color:#fff;text-align:left;padding:7px 9px;font-size:10.5px;text-transform:uppercase}
+th.num,td.num{text-align:right}
+tbody td{padding:6px 9px;border-bottom:1px solid var(--line)}
+.badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10.5px;font-weight:700}
+.sQUIEBRE{background:var(--badbg);color:var(--bad)}.sREPONER{background:var(--warnbg);color:var(--warn)}
+.abc{display:flex;gap:10px;margin-top:6px}
+.abc .seg{flex:1;text-align:center;border-radius:8px;padding:10px;color:#fff;font-weight:700;font-size:12px}
+.nota{margin-top:22px;font-size:11.5px;color:var(--mut);line-height:1.6;border-top:1px dashed var(--line);padding-top:12px}
+.actions{max-width:900px;margin:0 auto 14px;display:flex;gap:8px;justify-content:flex-end}
+.btn{border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+.btn.primary{background:var(--navy);color:#fff}.btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--line)}
+@media print{body{background:#fff;padding:0}.sheet{border:none;box-shadow:none;border-radius:0;max-width:none}.actions{display:none}}
+</style>
+</head>
+<body>
+<div class="actions">
+  <button class="btn ghost" onclick="history.length>1?history.back():window.close()">← Volver</button>
+  <button class="btn primary" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+</div>
+<div class="sheet">
+  <div class="head">
+    <div class="crest">⚓</div>
+    <div><h1>SARP<span>-NAVAL</span></h1><p>Sistema de Abastecimiento y Reposición Predictiva · Armada del Ecuador</p></div>
+    <div class="doc">RESUMEN EJECUTIVO<br><span id="folio" style="font-weight:500;color:var(--mut)"></span></div>
+  </div>
+  <div class="meta" id="meta"></div>
+  <h2>KPIs comprometidos</h2>
+  <div class="kgrid" id="kpis"></div>
+  <h2>Top ítems en riesgo</h2>
+  <table><thead><tr><th>Código</th><th>Ítem</th><th>Crit.</th><th>Estado</th><th class="num">Pedir</th><th class="num">Costo</th></tr></thead><tbody id="riesgo"></tbody></table>
+  <h2>Distribución ABC del valor anual</h2>
+  <div class="abc" id="abc"></div>
+  <p style="font-size:11px;color:var(--mut);margin-top:6px" id="abcNota"></p>
+  <div class="nota"><b>Datos al corte (foto), no en tiempo real por push.</b> Cifras provenientes del backend SARP-Naval sobre datos simulados. Demostrador para el Concurso de Innovación Naval 2026; ningún dato institucional real fue utilizado. Las órdenes de reposición se tramitan por el canal formal.</div>
+</div>
+<script>
+(function(){
+  var esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  var fmt=n=>"$"+Math.round(n||0).toLocaleString("es-EC");
+  var snap=null;
+  try{snap=JSON.parse(localStorage.getItem("sarp_snapshot")||"null");}catch(e){}
+  var hoy=new Date();
+  var dd=String(hoy.getDate()).padStart(2,"0"),mm=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][hoy.getMonth()],yy=hoy.getFullYear();
+  document.getElementById("folio").textContent="Emitido "+dd+"-"+mm+"-"+yy;
+  if(!snap||!snap.kpis){
+    document.getElementById("meta").innerHTML='<b>No hay datos.</b> Abra primero la app SARP-Naval (index.html) para generar el snapshot y vuelva a abrir este resumen.';
+    return;
+  }
+  var k=snap.kpis;
+  document.getElementById("meta").innerHTML='<b>Reparto:</b> '+esc(k.reparto||"—")+' &nbsp;·&nbsp; <b>Datos al corte:</b> '+esc((snap.salud&&snap.salud.fecha_datos)||k.generado||"—")+' &nbsp;·&nbsp; <b>Ítems:</b> '+((snap.salud&&snap.salud.items_cargados)||k.nItems||"—");
+  document.getElementById("kpis").innerHTML=
+    '<div class="kpi ok"><div class="v">'+(k.disponibilidad!=null?k.disponibilidad+"%":"—")+'</div><div class="l">Alistamiento (familia ancla)</div></div>'+
+    '<div class="kpi bad"><div class="v">'+(k.quiebres!=null?k.quiebres:"—")+'</div><div class="l">Quiebres de stock</div></div>'+
+    '<div class="kpi"><div class="v">'+fmt(k.capitalStock)+'</div><div class="l">Capital inmovilizado</div></div>'+
+    '<div class="kpi gold"><div class="v">'+fmt(k.ahorroPotencial)+'</div><div class="l">Ahorro potencial / año</div></div>';
+  var top=(snap.topRiesgo||[]);
+  document.getElementById("riesgo").innerHTML=top.length?top.map(function(i){
+    return '<tr><td style="font-family:Consolas,monospace">'+esc(i.codigo)+'</td><td>'+esc(i.nombre)+'</td><td>'+esc(i.criticidad)+'</td><td><span class="badge s'+i.estado+'">'+i.estado+'</span></td><td class="num">'+i.cantidad+'</td><td class="num">'+fmt(i.costo)+'</td></tr>';
+  }).join(""):'<tr><td colspan="6" style="color:#5b6b83;padding:12px">Sin ítems en riesgo.</td></tr>';
+  // Distribución ABC: si el snapshot no trae valores por clase, se muestra nota honesta.
+  var abc=snap.abcValor;
+  if(abc){
+    var tot=(abc.A||0)+(abc.B||0)+(abc.C||0)||1;
+    var cols={A:"#0b2545",B:"#c6a441",C:"#9fb3cf"};
+    document.getElementById("abc").innerHTML=["A","B","C"].map(function(c){
+      return '<div class="seg" style="background:'+cols[c]+'">Clase '+c+'<br>'+fmt(abc[c])+'<br>'+Math.round((abc[c]||0)*100/tot)+'%</div>';
+    }).join("");
+  } else {
+    document.getElementById("abc").innerHTML='<div class="seg" style="background:#9fb3cf">Distribución ABC disponible en la app (Inicio › Ejecutivo/Gestión)</div>';
+    document.getElementById("abcNota").textContent="La valorización por clase se calcula con el detalle de ítems; ábralo en la app para incluirlo aquí.";
+  }
+})();
+</script>
+</body>
+</html>

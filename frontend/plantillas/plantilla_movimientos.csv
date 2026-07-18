@@ -1,0 +1,3 @@
+codigo,fecha,tipo,cantidad,reparto,referencia
+"# EJEMPLO: REP-0001, 15/01/2025, CONSUMO, 6, EFLA Zona Norte, OT-2025-014",,,,,
+# fecha: dd/mm/aaaa o aaaa-mm-dd · tipo: CONSUMO/INGRESO/AJUSTE · 24-36 meses recomendados,,,,,

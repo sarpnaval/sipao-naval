@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b2545">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="SIPAO-Naval: Sistema Integral de Planificación y Alistamiento Operativo — plataforma de apoyo a la decisión de mando (demostrador con datos referenciales)">
+<title>SIPAO-Naval · Planificación y Alistamiento Operativo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icono-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icono-192.png">
+<link rel="stylesheet" href="estilos.css">
+<!-- Chart.js servido SIEMPRE del vendor local (offline-first, sin CDN) -->
+<script src="vendor/chart.umd.min.js" onerror="window.__noChart=true"></script>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div class="crest">⚓</div>
+    <div class="htit">
+      <h1>SIPAO<span>-NAVAL</span></h1>
+      <p>Sistema Integral de Planificación y Alistamiento Operativo · Apoyo a la decisión de mando · Armada del Ecuador</p>
+    </div>
+    <div class="hrole">
+      <label for="selRol">Vista de demostración — en producción: autenticación local por rol</label>
+      <select id="selRol">
+        <option value="operador">Operador / Almacenista</option>
+        <option value="jefe">Jefe de Abastecimientos del reparto</option>
+        <option value="gestion">Gestión DIGLOG/DIRABA (simulada)</option>
+        <option value="ejecutivo">Ejecutivo / Comandante</option>
+      </select>
+    </div>
+  </div>
+</header>
+<div class="demo">DEMOSTRADOR — DATOS SIMULADOS · CONCURSO DE INNOVACIÓN NAVAL 2026</div>
+<div class="corte" id="bannerCorte">Cargando datos del backend…</div>
+<div class="offbanner" id="bannerOffline">⚠ Sin conexión con el backend — mostrando datos al corte (último snapshot local)</div>
+
+<nav class="tabs" id="tabs">
+  <button data-v="inicio" class="act">Inicio</button>
+  <button data-v="inventario">Inventario</button>
+  <button data-v="alertas">Alertas <span class="b" id="tabBadge">0</span></button>
+  <button data-v="importar">Importar datos</button>
+  <button data-v="registro">📝 Registro</button>
+  <button data-v="metodo">Metodología</button>
+  <button data-v="validacion">🔬 Validación</button>
+  <button data-v="alistamiento">⚓ Alistamiento</button>
+  <button data-v="costeo">💲 Costeo de operación</button>
+  <button data-v="config">⚙ Configuración</button>
+</nav>
+
+<main>
+  <!-- ============ INICIO (contenido según rol) ============ -->
+  <section class="view act" id="v-inicio">
+    <div class="rolebar" id="roleBar">
+      <div class="ic" id="roleIc">⚓</div>
+      <div class="tx"><b id="roleTit">—</b><span id="roleSub">—</span></div>
+      <div class="simTag" id="roleSim" style="display:none">DATOS SIMULADOS</div>
+    </div>
+    <div id="roleHome"></div>
+  </section>
+
+  <!-- ============ INVENTARIO ============ -->
+  <section class="view" id="v-inventario">
+    <div class="tools">
+      <input id="q" type="search" placeholder="Buscar código o nombre…">
+      <select id="fEstado"><option value="">Estado: todos</option><option>QUIEBRE</option><option>REPONER</option><option>OK</option><option>EXCESO</option></select>
+      <select id="fCat"><option value="">Categoría: todas</option></select>
+      <select id="fABC"><option value="">Clase: todas</option><option>A</option><option>B</option><option>C</option></select>
+      <button class="btn ghost" id="btnCSVinv">⭳ CSV</button>
+    </div>
+    <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>Código</th><th>Ítem</th><th>Cat.</th><th>Crit.</th><th>Clase</th>
+          <th class="num">Stock</th><th class="num">ROP</th><th class="num">Días a quiebre</th>
+          <th>Estado</th><th class="num">Valor stock</th>
+        </tr></thead>
+        <tbody id="tbInv"></tbody>
+      </table>
+    </div>
+    <p style="font-size:11.5px;color:var(--mut);margin-top:8px">Toca una fila para ver el análisis del ítem (pronóstico, stock de seguridad, EOQ) y su explicación. ROP = punto de reorden. Cifras del backend (/api/items).</p>
+  </section>
+
+  <!-- ============ ALERTAS ============ -->
+  <section class="view" id="v-alertas">
+    <div class="abar">
+      <div class="s">Pedido borrador: <b id="draftN">0 ítems</b> · <b id="draftUSD">$0</b></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn gold" id="btnReporte">🖨 Pedido imprimible</button>
+        <button class="btn gold" id="btnCSVped">⭳ Exportar pedido CSV</button>
+        <button class="btn ghost" style="color:#fff;background:transparent;border-color:#3a5578" id="btnClear">Vaciar</button>
+      </div>
+    </div>
+    <div id="alertList"></div>
+  </section>
+
+  <!-- ============ IMPORTAR ============ -->
+  <section class="view" id="v-importar">
+    <div class="card">
+      <h3>Migración asistida de datos históricos <small>importa la base que SISLOG ya registra · nunca escribe en SISLOG</small></h3>
+      <p style="font-size:13px;color:var(--mut);line-height:1.6;margin-bottom:10px">Este módulo es el <b>asistente de migración</b>: incorpora a SARP la base histórica de abastecimientos que SISLOG ya registra (maestro, movimientos y existencias), siempre en solo lectura sobre la fuente. Suba <b>un archivo .xlsx</b> con tres hojas (maestro_items, movimientos, stock_actual) <b>o los tres .csv</b>. Primero se valida en seco (no toca la base) y se muestran todos los errores y advertencias; solo si es válido se habilita «Aplicar importación».</p>
+      <div class="impbox">
+        <div style="font-size:32px">📥</div>
+        <input id="fileImport" type="file" multiple accept=".xlsx,.csv">
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn primary" id="btnValidar">Validar (dry-run)</button>
+          <button class="btn gold" id="btnAplicar" disabled>Aplicar importación</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <a class="btn ghost" href="plantillas/plantilla_maestro_items.csv" download>⭳ Plantilla maestro_items</a>
+        <a class="btn ghost" href="plantillas/plantilla_movimientos.csv" download>⭳ Plantilla movimientos</a>
+        <a class="btn ghost" href="plantillas/plantilla_stock_actual.csv" download>⭳ Plantilla stock_actual</a>
+      </div>
+      <div id="impReporte"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Formato esperado <small>/api/importar/plantilla</small></h3>
+      <pre class="plantilla" id="impPlantilla">Cargando descripción del formato…</pre>
+    </div>
+  </section>
+
+  <!-- ============ REGISTRO DIRECTO (C1.2 — SARP como sistema primario) ============ -->
+  <section class="view" id="v-registro">
+    <div class="notec"><b>Registro directo en la base propia de SARP.</b> Con este módulo el reparto puede operar SARP como <b>sistema primario</b>: consumos, ingresos, ajustes y altas de ítem se registran aquí y el sistema recalcula pronósticos y alertas al instante. SARP <b>nunca escribe en SISLOG</b>. <b>Demostración:</b> en producción, cada registro queda firmado por el usuario autenticado; aquí se registra el rol de demostración activo.</div>
+    <div class="notec" id="regOffline" style="display:none;background:var(--warnbg);border-left-color:var(--warn);color:var(--warn)"><b>Sin conexión con el backend.</b> El registro directo necesita el servidor en línea (iniciar_sarp.bat); no hay cola offline en v1 (mejora futura documentada). Los formularios quedan deshabilitados.</div>
+
+    <div class="grid2b regcols">
+      <div class="card">
+        <h3>Registrar movimiento <small>consumo · ingreso · ajuste</small></h3>
+        <form id="formMov" class="regform" autocomplete="off">
+          <label>Ítem (código o nombre)
+            <input id="movItem" list="dlItems" placeholder="Escriba para buscar en el maestro…" required>
+          </label>
+          <div class="reginfo" id="movInfo">Elija un ítem para ver su existencia actual.</div>
+          <div class="regrow">
+            <label>Tipo
+              <select id="movTipo">
+                <option value="consumo">Consumo (salida)</option>
+                <option value="ingreso">Ingreso (entrada)</option>
+                <option value="ajuste">Ajuste (fija existencia contada)</option>
+              </select>
+            </label>
+            <label id="lblCantidad">Cantidad
+              <input id="movCantidad" type="number" min="0" step="any" required>
+            </label>
+            <label>Fecha (no futura)
+              <input id="movFecha" type="date">
+            </label>
+          </div>
+          <label id="lblReferencia">Referencia <small>(opcional, p. ej. orden de trabajo)</small>
+            <input id="movReferencia" placeholder="OT-2026-001">
+          </label>
+          <label id="lblMotivo" style="display:none">Motivo del ajuste <small>(obligatorio)</small>
+            <input id="movMotivo" placeholder="Conteo físico / merma / corrección">
+          </label>
+          <div class="regacciones">
+            <button class="btn primary" type="submit" id="btnMov">Registrar movimiento</button>
+          </div>
+          <div class="regerrores" id="movErrores"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Alta de ítem nuevo <small>maestro propio de SARP</small></h3>
+        <form id="formAlta" class="regform" autocomplete="off">
+          <div class="regrow">
+            <label>Código <small>(único)</small><input id="altaCodigo" placeholder="2815-EC-1200" required></label>
+            <label>Criticidad <small>(V vital · E esencial · D deseable)</small>
+              <select id="altaCriticidad"><option value="V">V — Vital</option><option value="E">E — Esencial</option><option value="D">D — Deseable</option></select>
+            </label>
+          </div>
+          <label>Nombre<input id="altaNombre" placeholder="Filtro de combustible motor F/B 200HP" required></label>
+          <div class="regrow">
+            <label>Categoría<input id="altaCategoria" list="dlCats" placeholder="Repuestos motor" required></label>
+            <label>Unidad<input id="altaUnidad" placeholder="unidad" required></label>
+          </div>
+          <div class="regrow">
+            <label>Costo unitario (USD)<input id="altaCosto" type="number" min="0" step="0.01" placeholder="38.50" required></label>
+            <label>Lead time (días)<input id="altaLT" type="number" min="1" step="1" placeholder="45" required></label>
+            <label>Importado <small>(define costo de orden)</small>
+              <select id="altaImportado"><option value="S">S — importado</option><option value="N">N — nacional</option></select>
+            </label>
+          </div>
+          <label>Proveedor <small>(opcional)</small><input id="altaProveedor" placeholder="Proveedor S.A."></label>
+          <p style="font-size:11.5px;color:var(--mut)">El ítem nace sin historia ni existencia: opera en <b>política de mínimos</b> hasta acumular datos. Registre luego su primer <b>ingreso</b>.</p>
+          <div class="regacciones">
+            <button class="btn gold" type="submit" id="btnAlta">Dar de alta el ítem</button>
+          </div>
+          <div class="regerrores" id="altaErrores"></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>Bitácora de auditoría <small>últimas 20 acciones · /api/bitacora</small></h3>
+      <div class="twrap" id="bitacoraWrap"><div class="nochart" style="height:100px">Cargando bitácora…</div></div>
+      <p style="font-size:11.5px;color:var(--mut);margin-top:8px">Pista de auditoría de toda escritura en la base propia de SARP (persiste incluso al reimportar datos). En producción, cada fila queda firmada por el usuario autenticado.</p>
+    </div>
+    <datalist id="dlItems"></datalist>
+    <datalist id="dlCats"></datalist>
+  </section>
+
+  <!-- ============ METODOLOGÍA ============ -->
+  <section class="view" id="v-metodo">
+    <div class="card met">
+      <h3>Cómo calcula SARP-Naval</h3>
+      <p><b>1 · Clasificación del inventario.</b> Cada ítem se clasifica por valor anual de demanda (<b>ABC</b>: clase A ≈ 80 % del valor, B ≈ 15 %, C ≈ 5 %) y por variabilidad de su demanda (<b>XYZ</b> según coeficiente de variación: X estable &lt; 0,5; Y variable &lt; 1; Z errática ≥ 1). La criticidad operativa (<b>V-E-D</b>: Vital, Esencial, Deseable) fija el nivel de servicio objetivo: 99 %, 95 % y 90 % respectivamente.</p>
+      <p><b>2 · Pronóstico de demanda.</b> Para demanda regular se usa suavizamiento exponencial doble (<b>Holt</b>); para ítems de demanda intermitente, una variante de <b>Croston</b>. El error del modelo (σ) alimenta el stock de seguridad; el MAPE se reporta como confiabilidad.</p>
+      <div class="f">Nivel_t = α·D_t + (1−α)·(Nivel_{t−1} + Tendencia_{t−1}) · Tendencia_t = β·(Nivel_t − Nivel_{t−1}) + (1−β)·Tendencia_{t−1}</div>
+      <p><b>3 · Parámetros de reposición.</b></p>
+      <div class="f">SS = z·σ·√LT · ROP = d̄·LT + SS · EOQ = √(2·D·S ⁄ H)</div>
+      <p>z depende de la criticidad V-E-D, σ es la desviación del error de pronóstico, d̄ la demanda media, D la demanda anual, S el costo de emitir una orden (USD 120 importado / USD 45 nacional) y H el costo anual de posesión (18 % del valor).</p>
+      <p><b>4 · Alertas.</b> El sistema compara diariamente el stock disponible contra el ROP y proyecta los días hasta el quiebre. La prioridad combina estado (QUIEBRE&gt;REPONER&gt;EXCESO), criticidad (V&gt;E&gt;D) y menor margen frente al lead time; la cantidad sugerida repone hasta el nivel máximo (ROP + EOQ).</p>
+      <h4>Arquitectura de esta versión</h4>
+      <p>Esta es la <b>app conectada</b>: el navegador consume los endpoints <b>/api/*</b> de un backend FastAPI local (SQLite) que ejecuta el mismo motor validado. Todas las cifras provienen del backend o del último <b>snapshot offline</b> guardado en el navegador (IndexedDB); ninguna se inventa. La app es una <b>PWA</b> instalable que funciona sin red tras la primera carga.</p>
+      <h4>Ruta institucional: coexiste → migra → sustituye progresivamente</h4>
+      <p>SARP-Naval se plantea como <b>sistema integral de gestión de abastecimientos de nueva generación</b>. <b>Hoy</b> coexiste con SISLOG —sistema de registro transaccional sin capa analítica ni pronóstico— e incorpora su base histórica mediante la <b>migración asistida de datos</b> (pestaña Importar). El módulo de <b>registro directo</b> permite además operar SARP como <b>sistema primario</b> de un reparto (movimientos, altas de ítem y bitácora de auditoría). La <b>sustitución progresiva</b> del registro de abastecimientos se propone como cronograma de implementación sugerido, supeditado a la decisión institucional. En toda la ruta se mantiene la regla: <b>SARP nunca escribe en SISLOG</b>.</p>
+      <div class="notec"><b>Limitación declarada (v1.0):</b> las cuatro vistas por rol son de <b>demostración</b> y se cambian con el selector del encabezado. No hay autenticación real todavía; en producción cada rol entrará con autenticación local (sin exponer nada fuera de la red institucional).</div>
+      <p style="font-size:12px;color:var(--mut)"><i>Elaborado para el Concurso de Innovación Naval 2026. Todos los datos son simulados; ningún dato institucional real fue utilizado.</i></p>
+    </div>
+  </section>
+
+  <!-- ============ VALIDACIÓN (rigor científico · jurado técnico) ============ -->
+  <section class="view" id="v-alistamiento">
+    <div class="card" style="margin-bottom:14px">
+      <h3>Alistamiento operativo — optimización bajo presupuesto <small>Readiness-Based Sparing · datos 100 % simulados</small></h3>
+      <p class="valintro" id="alFrontera">Cargando…</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0" id="alKpis">
+        <div class="pcell"><div class="v" id="alBase">—</div><div class="l">Presupuesto en repuestos «impide operar»</div></div>
+        <div class="pcell"><div class="v" id="alLineal">—</div><div class="l">Alistamiento · recorte lineal (hoy)</div></div>
+        <div class="pcell"><div class="v" id="alOpt">—</div><div class="l">Alistamiento · optimizado (mismo dinero)</div></div>
+        <div class="pcell"><div class="v" id="alGan">—</div><div class="l">Puntos ganados por decidir DÓNDE recortar</div></div>
+      </div>
+      <label style="display:block;margin:6px 0 2px">Recorte presupuestario simulado: <b id="alPct">0 %</b></label>
+      <input type="range" id="alSlider" min="0" max="50" step="10" value="0" style="width:100%">
+      <div style="height:250px;margin-top:12px"><canvas id="chAlist"></canvas></div>
+      <p style="font-size:11.5px;color:var(--mut);margin-top:6px">Verde: asignación optimizada por análisis marginal (política (Q,r) de Hadley-Whitin sobre los ítems cuya falta <b>impide operar</b> — esencialidad código 1). Rojo: recorte proporcional de los niveles vigentes (z fijo por criticidad). El nivel de servicio deja de ser un decreto y pasa a ser una <b>decisión</b>.</p>
+    </div>
+    <div class="card">
+      <h3>Plan por ítem <small>nivel de servicio resultante — output del optimizador, no input decretado</small></h3>
+      <div style="overflow-x:auto"><table id="alPlan"></table></div>
+    </div>
+  </section>
+  <section class="view" id="v-costeo">
+    <div class="card" style="margin-bottom:14px">
+      <h3>Matriz de costeo de operación — unidades guardacostas del COGUAR <small>Readiness-Based Sparing aplicado al día de mar · valores referenciales configurables por reparto</small></h3>
+      <p class="valintro">Traduce el presupuesto en <b>días de mar</b> y en <b>cobertura del plan de operaciones</b>. Dos tarifas por clase: el <b>costo pleno</b> del día de mar (para justificar el presupuesto) y el <b>costo marginal</b> (para decidir si se puede pagar la próxima patrulla — el propio US Coast Guard prohíbe usar la tarifa plena para esto). <b>No se modelan resultados de misión</b> (incautaciones, vidas salvadas): solo cobertura de días, como recomienda la evidencia (GAO-03-155). Los coeficientes, los días del plan y las clases capaces son <b>parámetros de configuración</b>: vienen con valores referenciales para operar desde el primer día y cada reparto carga los suyos al implementar.</p>
+      <div style="overflow-x:auto"><table id="coTarifas"></table></div>
+      <p style="font-size:12px;margin-top:8px" id="coPlan">—</p>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>La prueba del recorte presupuestario <small>priorizar por doctrina vs. repartir «parejo»</small></h3>
+      <p class="valintro">La curva muestra la cobertura de la <b>operación de máxima prioridad — la salvaguarda de la vida humana en el mar (SAR)</b> a medida que baja el presupuesto operativo. <b>Verde:</b> priorización por la doctrina de empleo guardacostas: primero los mínimos de cada operación en orden de prioridad, luego la presencia mínima de cada clase en su zona, y solo con el remanente se amplía el plan. <b>Rojo:</b> repartir el recorte parejo entre todas las operaciones. La diferencia es la razón de ser del sistema.</p>
+      <div style="height:250px"><canvas id="chCosteo"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>Cobertura por operación con el presupuesto asignado <small id="coPct">recorte 0 %</small></h3>
+      <label style="display:block;margin:2px 0 8px">Recorte del presupuesto operativo: <b id="coPctL">0 %</b>
+        <input type="range" id="coSlider" min="0" max="60" step="20" value="0" style="width:100%"></label>
+      <div id="coBarras"></div>
+      <p style="font-size:12px;margin-top:8px" id="coBajoMin"></p>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>¿Qué compra el siguiente dólar? — escalera unificada repuesto ⇄ día de mar <small>un solo presupuesto, decisión marginal</small></h3>
+      <p class="valintro">La pregunta que ningún sistema responde hoy: con un presupuesto único, ¿el siguiente dólar rinde más en <b>un repuesto crítico</b> (sube el alistamiento de las interceptoras y desbloquea días de mar) o en <b>un día más de patrullaje</b>? Los pasos de repuestos son <b>reales</b>: salen de la frontera del optimizador sobre el catálogo del demostrador. Escenario de configuración inicial (alistamiento degradado por quiebres, recorte del 40 %); ajustable por el reparto.</p>
+      <div id="coEscalera">—</div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>Costo del día de mar, rubro por rubro <small>captura física: cantidad × precio, no un monto tecleado</small></h3>
+      <p class="valintro">El costo variable <b>no se teclea</b>: es la suma verificada de sus rubros. Por eso el sistema responde a «¿qué pasa si sube el galón de diésel?» — cambie el precio en <b>⚙ Configuración</b> y todas las cifras se recalculan. Los costos de intervalo <b>calendario</b> (carena, certificaciones, seguros, remuneraciones) van al <b>costo fijo anual</b>, nunca a la tarifa marginal: dividirlos entre horas de navegación es el error que la propia normativa de costeo del Servicio de Guardacostas de los EE. UU. advierte evitar.</p>
+      <label style="display:block;margin:2px 0 8px">Modelo: <select id="coRubroSel" style="padding:4px 8px"></select></label>
+      <div id="coRubros">—</div>
+    </div>
+    <div class="card">
+      <h3>Ficha logística digital por modelo <small>la doctrina la contempla en papel; el sistema la calcula</small></h3>
+      <p class="valintro">La doctrina de empleo gestiona el abastecimiento de cada unidad con una <b>ficha logística</b> por niveles (Máximo · Seguridad · Mínimo · Crítico) y un <b>Rango Operativo</b> como ventana de reaprovisionamiento. SARP la digitaliza: los niveles dejan de ser porcentajes fijos y se calculan <b>por ítem con la demanda real</b> (stock máximo · stock de seguridad · punto de reorden · quiebre). Los valores de características los carga cada unidad.</p>
+      <label style="display:block;margin:2px 0 8px">Clase: <select id="coFichaSel" style="padding:4px 8px"></select></label>
+      <div id="coFicha">—</div>
+    </div>
+  </section>
+  <!-- ============ CONFIGURACIÓN ============ -->
+  <section class="view" id="v-config">
+    <div class="card" style="margin-bottom:14px">
+      <h3>Configuración de la plataforma <small>aquí el reparto carga sus propias cifras</small></h3>
+      <p class="valintro">Todo lo que el sistema calcula sale de estos parámetros. Vienen con <b>valores referenciales</b> para que la plataforma opere desde el primer día; al implementarse, el reparto reemplaza cada uno por su cifra real. Cada valor declara su <b>procedencia</b>, y todo cambio queda en bitácora con su motivo y responsable.</p>
+      <div id="cfMadurez"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>Parámetros generales <small>precios, raciones y factores</small></h3>
+      <div id="cfParametros">Cargando…</div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>Plan anual de operaciones <small>días requeridos y mínimos por operación</small></h3>
+      <div id="cfOperaciones">Cargando…</div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>Modelos de unidad <small>disponibilidad y costos por modelo</small></h3>
+      <div id="cfModelos">Cargando…</div>
+    </div>
+
+    <div class="card" id="cfRevisarCard" style="margin-bottom:14px;display:none">
+      <h3>Revisar antes de confirmar <small>vea el efecto de sus cambios</small></h3>
+      <div id="cfRevisar"></div>
+      <label style="display:block;margin:10px 0 4px;font-size:13px">Motivo del cambio (obligatorio, queda en bitácora)
+        <input id="cfMotivo" type="text" style="width:100%;padding:6px" placeholder="Ej.: actualización del precio del combustible según oficio…"></label>
+      <label style="display:block;margin:4px 0 10px;font-size:13px">Responsable
+        <input id="cfResponsable" type="text" style="width:100%;padding:6px" placeholder="Grado y nombre de quien firma"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="cfConfirmar">Confirmar y firmar</button>
+        <button class="btn ghost" id="cfCancelar">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Bitácora de configuración <small>quién cambió qué, cuándo y por qué</small></h3>
+      <div style="margin-bottom:10px"><button class="btn ghost" id="cfRestaurar">↺ Restaurar valores referenciales</button></div>
+      <div id="cfBitacora">—</div>
+    </div>
+  </section>
+
+  <section class="view" id="v-validacion">
+    <div class="card" style="margin-bottom:14px">
+      <h3>Validación del pronóstico — backtesting rolling-origin <small>vista pensada para auditoría / jurado técnico</small></h3>
+      <p class="valintro">Evaluación temporal <b>honesta</b> (origen móvil, sin fuga de datos del futuro) de los mismos modelos que sirve la app: <b>Holt</b> para demanda regular y <b>Croston</b> para demanda intermitente. Cifras calculadas <b>en vivo</b> por <code>/api/validacion</code> sobre el dataset cargado. <b>Estos resultados son sobre datos SIMULADOS;</b> los KPIs de exactitud (MAPE ≤ 25 % en clase A regular · MASE &lt; 1 en intermitentes) se <b>comprometen sobre los datos reales del reparto guardacostas piloto</b>, no sobre esta demo.</p>
+      <div class="valctrl">
+        <label>Horizonte de pronóstico
+          <select id="valH"><option value="1">1 mes</option><option value="2">2 meses</option><option value="3" selected>3 meses</option></select>
+        </label>
+        <label>Origen inicial t₀ (meses de entren.)
+          <input id="valT0" type="number" min="12" max="30" step="1" value="24">
+        </label>
+        <button class="btn ghost" id="valRefrescar">↻ Recalcular</button>
+        <span id="valEstado" class="valestado"></span>
+      </div>
+      <p style="font-size:11px;color:var(--mut);margin-top:8px">t₀ entre 12 y 30 meses (al menos un año de entrenamiento antes del primer pronóstico). Cada cambio reconsulta el backtesting.</p>
+    </div>
+
+    <div id="valKPIs"></div>
+
+    <div class="grid2b">
+      <div class="card">
+        <h3>Sensibilidad por horizonte <small>MAPE clase A regular · h = 1, 2, 3</small></h3>
+        <div class="chartbox" id="valChartBox"><canvas id="chVal"></canvas></div>
+        <p style="font-size:11.5px;color:var(--mut);margin-top:8px">MAPE de la clase A regular al ampliar el horizonte de pronóstico. La línea punteada marca la meta ≤ 25 %. Barra <b>navy</b> = cumple; <b>roja</b> = supera la meta.</p>
+      </div>
+      <div class="card">
+        <h3>Detalle por ítem <small>backtesting por ítem · orden: incidencias primero</small></h3>
+        <div class="twrap" id="valTablaWrap" style="max-height:420px;overflow:auto"><div class="nochart" style="height:120px">Cargando validación por ítem…</div></div>
+        <p style="font-size:11.5px;color:var(--mut);margin-top:8px">MAPE (%) para ítems regulares · MASE para intermitentes (MASE &lt; 1 = mejor que el pronóstico ingenuo naïve-1). Resaltados en <b style="color:var(--bad)">rojo</b>: ítems <b>VITALES</b> que no cumplen la meta — candidatos a revisión del modelo.</p>
+      </div>
+    </div>
+
+    <div class="card met">
+      <h3>Nota metodológica <small>desde el endpoint · reproducible</small></h3>
+      <p id="valNota" style="font-size:13px;color:#22304a;line-height:1.65">Cargando nota metodológica…</p>
+    </div>
+  </section>
+</main>
+
+<!-- ============ MODAL DETALLE + EXPLICABILIDAD ============ -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <div class="mhead"><h2 id="mTit">Ítem</h2><button class="x" id="mX">✕</button></div>
+    <div class="mcode" id="mCode"></div>
+    <div class="explica" id="mExplica"></div>
+    <div class="pgrid" id="mParams"></div>
+    <details class="tecnico" id="mTecnico">
+      <summary>Desglose técnico del cálculo (36 m → método → d̄ → σ → LT → z → SS → ROP → EOQ → MAPE)</summary>
+      <div class="flowchain" id="mFlow"></div>
+    </details>
+    <div class="chartbox" style="height:260px"><canvas id="chItem"></canvas></div>
+    <p style="font-size:11.5px;color:var(--mut);margin-top:8px">Línea continua: consumo mensual histórico (36 m). Punteada: pronóstico 6 m. Bandas: punto de reorden (ROP) y stock de seguridad (SS).</p>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn primary" id="mPedir">＋ Añadir al pedido</button>
+    </div>
+  </div>
+</div>
+
+<nav class="bnav"><div class="in">
+  <button data-v="inicio" class="act"><span class="ic">▦</span>Inicio</button>
+  <button data-v="inventario"><span class="ic">≣</span>Inventario</button>
+  <button data-v="alertas"><span class="ic">⚠</span>Alertas<span class="b" id="navBadge">0</span></button>
+  <button data-v="importar"><span class="ic">📥</span>Importar</button>
+  <button data-v="registro"><span class="ic">📝</span>Registro</button>
+  <button data-v="metodo"><span class="ic">ƒ</span>Método</button>
+  <button data-v="validacion"><span class="ic">🔬</span>Validar</button>
+  <button data-v="alistamiento"><span class="ic">⚓</span>Alistar</button>
+  <button data-v="costeo"><span class="ic">💲</span>Costeo</button>
+</div></nav>
+
+<div id="toast"></div>
+<footer>SARP-Naval v1.0 (app conectada) · Propuesta al Concurso de Innovación Naval 2026 · Dirección de Innovación y Desarrollo — Armada del Ecuador<br>PWA instalable, offline-first. Datos 100 % simulados. Las vistas por rol son de demostración (sin autenticación real en v1.0).</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

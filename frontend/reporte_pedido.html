@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SARP-Naval · Pedido de reposición</title>
+<link rel="icon" href="icons/icono-192.png" type="image/png">
+<style>
+:root{--navy:#0b2545;--gold:#c6a441;--ink:#16233a;--mut:#5b6b83;--line:#dde5ef;--bad:#b3261e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:#eef2f7;padding:24px}
+.sheet{max-width:900px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:32px 36px;box-shadow:0 3px 14px rgba(11,37,69,.10)}
+.head{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:6px}
+.crest{width:54px;height:54px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--gold);flex:none}
+.head h1{font-size:19px;letter-spacing:.05em;color:var(--navy)}
+.head h1 span{color:var(--gold)}
+.head p{font-size:12px;color:var(--mut);margin-top:2px}
+.doc{font-size:13px;font-weight:700;color:var(--navy);text-align:right;flex:1}
+.meta{display:flex;flex-wrap:wrap;gap:6px 26px;font-size:12.5px;color:#22304a;margin:14px 0 18px}
+.meta b{color:var(--navy)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px}
+thead th{background:var(--navy);color:#fff;text-align:left;padding:8px 9px;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+th.num,td.num{text-align:right}
+tbody td{padding:7px 9px;border-bottom:1px solid var(--line)}
+tbody tr:nth-child(even){background:#f6f9fc}
+.urg{color:var(--bad);font-weight:700}
+tfoot td{padding:10px 9px;font-weight:800;font-size:14px;border-top:2px solid var(--navy)}
+.firmas{display:flex;gap:40px;margin-top:56px}
+.firma{flex:1;text-align:center;font-size:12px;color:var(--mut)}
+.firma .line{border-top:1px solid var(--ink);margin-bottom:6px}
+.nota{margin-top:22px;font-size:11.5px;color:var(--mut);line-height:1.6;border-top:1px dashed var(--line);padding-top:12px}
+.nota b{color:var(--navy)}
+.actions{max-width:900px;margin:0 auto 14px;display:flex;gap:8px;justify-content:flex-end}
+.btn{border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+.btn.primary{background:var(--navy);color:#fff}.btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--line)}
+@media print{body{background:#fff;padding:0}.sheet{border:none;box-shadow:none;border-radius:0;max-width:none}.actions{display:none}}
+</style>
+</head>
+<body>
+<div class="actions">
+  <button class="btn ghost" onclick="history.length>1?history.back():window.close()">← Volver</button>
+  <button class="btn primary" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+</div>
+<div class="sheet">
+  <div class="head">
+    <div class="crest">⚓</div>
+    <div><h1>SARP<span>-NAVAL</span></h1><p>Sistema de Abastecimiento y Reposición Predictiva · Armada del Ecuador</p></div>
+    <div class="doc">PEDIDO DE REPOSICIÓN<br><span id="folio" style="font-weight:500;color:var(--mut)"></span></div>
+  </div>
+  <div class="meta" id="meta"></div>
+  <table>
+    <thead><tr><th>#</th><th>Código</th><th>Ítem</th><th>Crit.</th><th class="num">Cant. sugerida</th><th class="num">Costo unit.</th><th class="num">Subtotal</th><th>Prioridad</th></tr></thead>
+    <tbody id="filas"></tbody>
+    <tfoot><tr><td colspan="6" class="num">TOTAL ESTIMADO</td><td class="num" id="total">$0</td><td></td></tr></tfoot>
+  </table>
+  <div class="firmas">
+    <div class="firma"><div class="line"></div>Elabora — Almacenista / Operador</div>
+    <div class="firma"><div class="line"></div>Revisa — Jefe de Abastecimientos del reparto</div>
+    <div class="firma"><div class="line"></div>Autoriza — Comando</div>
+  </div>
+  <div class="nota"><b>Tramitar por el canal formal.</b> Este documento es una propuesta de reposición generada por SARP-Naval a partir de los parámetros de inventario (SS, ROP, EOQ) calculados sobre los datos al corte. SARP-Naval no emite órdenes ni escribe en SISLOG: la orden de compra se cursa por el procedimiento administrativo vigente. <span id="disclaimer"></span></div>
+</div>
+<script>
+(function(){
+  var esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  var fmt=n=>"$"+Math.round(n||0).toLocaleString("es-EC");
+  var data=null;
+  try{data=JSON.parse(localStorage.getItem("sarp_pedido_reporte")||"null");}catch(e){}
+  if(!data||!data.items||!data.items.length){
+    document.getElementById("filas").innerHTML='<tr><td colspan="8" style="padding:16px;color:#5b6b83">No hay pedido cargado. Genere el pedido desde la sección Alertas de la app.</td></tr>';
+    return;
+  }
+  var hoy=new Date();
+  var dd=String(hoy.getDate()).padStart(2,"0"),mm=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][hoy.getMonth()],yy=hoy.getFullYear();
+  document.getElementById("folio").textContent="Emitido "+dd+"-"+mm+"-"+yy;
+  document.getElementById("meta").innerHTML=
+    '<div><b>Reparto:</b> '+esc(data.reparto||"—")+'</div>'+
+    '<div><b>Datos al corte:</b> '+esc(data.generado||"—")+'</div>'+
+    '<div><b>Ítems en el pedido:</b> '+data.items.length+'</div>'+
+    '<div><b>Origen:</b> '+(data.borrador?"pedido borrador seleccionado":"todas las alertas de reposición")+'</div>';
+  document.getElementById("filas").innerHTML=data.items.map(function(i,n){
+    var urg=i.estado==="QUIEBRE";
+    return '<tr><td class="num">'+(n+1)+'</td><td style="font-family:Consolas,monospace">'+esc(i.codigo)+'</td><td>'+esc(i.nombre)+'</td>'+
+      '<td>'+esc(i.criticidad||"")+'</td><td class="num">'+i.cantidad+'</td><td class="num">'+fmt(i.costo_unit)+'</td>'+
+      '<td class="num">'+fmt(i.costo_estimado)+'</td><td'+(urg?' class="urg"':'')+'>'+(urg?"URGENTE":"NORMAL")+'</td></tr>';
+  }).join("");
+  document.getElementById("total").textContent=fmt(data.total);
+  document.getElementById("disclaimer").textContent="Datos simulados (demostrador Concurso de Innovación Naval 2026).";
+})();
+</script>
+</body>
+</html>

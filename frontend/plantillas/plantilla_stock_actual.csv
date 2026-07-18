@@ -1,0 +1,3 @@
+codigo,existencia,fecha_corte,ubicacion
+"# EJEMPLO: REP-0001, 12, 30/06/2026, Bodega A Estante 3",,,
+# una fila por ítem · existencia>=0,,,
