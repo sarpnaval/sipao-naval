@@ -98,6 +98,40 @@ app.include_router(router_costeo)  # matriz de costeo (17-jul)
 app.include_router(router_config, dependencies=_guardia)  # panel de configuracion
 
 
+@app.middleware("http")
+async def respaldar_tras_escribir(request: Request, call_next):
+    """Respalda la base después de CUALQUIER escritura que haya salido bien.
+
+    DEFECTO QUE ESTO CORRIGE (18-jul-2026)
+    --------------------------------------
+    `respaldo.respaldar()` se llamaba a mano, y solo desde el panel de
+    configuración. Importar un extracto de SISLOG o registrar movimientos
+    NO disparaba respaldo: en la instancia publicada el disco es efímero,
+    así que esos datos se perdían en el siguiente reinicio mientras la
+    pantalla decía «respaldo activo». El usuario habría cargado su
+    información y la habría encontrado borrada al día siguiente.
+
+    Se resuelve aquí, en un solo sitio y por MÉTODO, en vez de repartir
+    llamadas por cada router: así queda cubierta toda escritura, incluidas
+    las que se agreguen después, sin que nadie tenga que acordarse. Es la
+    misma decisión que se tomó con la llave de escritura (seguridad.py).
+
+    Solo respalda si la petición terminó BIEN (2xx): un 401, un 422 o un
+    500 no cambiaron nada que valga la pena subir. `respaldar()` agrupa
+    ráfagas y sube en segundo plano, así que no retrasa la respuesta.
+    """
+    respuesta = await call_next(request)
+    if (request.method not in ("GET", "HEAD", "OPTIONS")
+            and 200 <= respuesta.status_code < 300):
+        try:
+            from backend.app import respaldo
+            respaldo.respaldar()
+        except Exception as e:                 # nunca tumbar la respuesta
+            print(f"  ⚠ No se pudo programar el respaldo: "
+                  f"{type(e).__name__}: {e}")
+    return respuesta
+
+
 @app.get("/api/salud", tags=["Salud"])
 def salud(bd: sqlite3.Connection = Depends(obtener_bd)):
     """Estado operativo de la API y resumen de los datos cargados."""

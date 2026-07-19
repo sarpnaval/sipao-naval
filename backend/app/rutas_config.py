@@ -299,7 +299,10 @@ def guardar(cuerpo: GuardarConfig, bd: sqlite3.Connection = Depends(obtener_bd))
              str(x["antes"]), str(x["despues"]), x["origen"], x["fuente"],
              cuerpo.motivo, cuerpo.responsable or "configurador"))
     bd.commit()
-    respaldo.respaldar()          # instantánea (no bloquea la respuesta)
+    # El respaldo lo dispara el middleware de main.py para TODA escritura que
+    # sale bien. No se llama aquí a mano: tener dos mecanismos fue justo lo
+    # que dejó sin respaldo a la importación y al registro directo, porque
+    # solo esta ruta se acordaba de hacerlo.
     return {"guardados": len(aplicados), "cambios": aplicados,
             "antes": antes, "despues": despues, "madurez": _madurez(),
             "respaldo": respaldo.estado()}
@@ -324,7 +327,7 @@ def restaurar(bd: sqlite3.Connection = Depends(obtener_bd)):
         (datetime.now().isoformat(timespec="seconds"),
          "Restauración de los valores referenciales de fábrica"))
     bd.commit()
-    respaldo.respaldar(forzar=True)
+    # El respaldo lo dispara el middleware (ver main.py).
     return {"restaurado": True, "indicadores": _indicadores(),
             "madurez": _madurez()}
 
