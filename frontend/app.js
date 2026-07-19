@@ -1466,7 +1466,10 @@ async function previsualizarCambios() {
       body: JSON.stringify(cambiosPendientes) });
     r = await resp.json();
     if (!resp.ok) {
-      $("#cfRevisar").innerHTML = `<div class="notec" style="background:var(--warnbg);border-left-color:var(--warn)"><b>No se puede aplicar:</b> ${esc(r.detail || "valor inválido")}</div>`;
+      // La API responde SIEMPRE {"error": ...} (ver main.py). Leer `detail`
+      // hacía que el operador viera «valor inválido» en el 100 % de los
+      // rechazos, sin saber nunca qué casilla estaba mal.
+      $("#cfRevisar").innerHTML = `<div class="notec" style="background:var(--warnbg);border-left-color:var(--warn)"><b>No se puede aplicar:</b> ${esc(r.error || "valor inválido")}</div>`;
       return;
     }
   } catch (e) { $("#cfRevisar").textContent = "No se pudo calcular el impacto."; return; }
@@ -1504,7 +1507,7 @@ async function confirmarCambios() {
       body: JSON.stringify({ cambios: cambiosPendientes, motivo,
                              responsable: $("#cfResponsable").value.trim() }) });
     const r = await resp.json();
-    if (!resp.ok) { toast("No se guardó: " + (r.detail || "valor inválido")); return; }
+    if (!resp.ok) { toast("No se guardó: " + (r.error || "valor inválido")); return; }
     toast(`${r.guardados} parámetro(s) guardado(s)`);
     cambiosPendientes = []; $("#cfRevisarCard").style.display = "none";
     $("#cfMotivo").value = ""; configCargada = false; costeoCargado = false;

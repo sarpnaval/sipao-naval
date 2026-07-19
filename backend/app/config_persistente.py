@@ -18,6 +18,7 @@ tenga el valor de fábrica (float, int o texto), para no depender de un
 esquema de tipos aparte.
 """
 
+import copy
 from datetime import datetime
 
 from backend.motor import costeo
@@ -114,6 +115,12 @@ def cargar_configuracion(conexion):
     except Exception:
         return 0, 0                       # base sin la tabla todavía
 
+    # Fotografía de los valores DE FÁBRICA. Se toma aquí porque esta función
+    # corre al arrancar, antes de que nada haya tocado los diccionarios del
+    # motor: si más abajo la configuración guardada resulta inaplicable, este
+    # es el estado sano al que se puede volver para que el servicio encienda.
+    fabrica = {s: copy.deepcopy(_contenedor(s)) for s in SECCIONES}
+
     aplicados, ignorados = 0, 0
     for f in filas:
         seccion = f["seccion"] if hasattr(f, "keys") else f[0]
@@ -126,7 +133,14 @@ def cargar_configuracion(conexion):
         if seccion not in SECCIONES:
             ignorados += 1
             continue
-        if _escribir(seccion, clave, campo, valor):
+        try:
+            escrito = _escribir(seccion, clave, campo, valor)
+        except Exception as e:
+            # Un valor guardado jamás puede impedir que el sistema encienda.
+            print(f"  (configuración ignorada, {seccion}.{clave}.{campo}: "
+                  f"{type(e).__name__})")
+            escrito = False
+        if escrito:
             cont = _contenedor(seccion)
             if origen:
                 cont[clave]["origen"] = origen
@@ -137,5 +151,29 @@ def cargar_configuracion(conexion):
             ignorados += 1
 
     if aplicados:
-        costeo._refrescar_clases()
+        try:
+            costeo._refrescar_clases()
+        except Exception as e:
+            # EL SEGURO QUE IMPORTA (18-jul-2026)
+            # -----------------------------------
+            # Un valor guardado con un subcampo inexistente (p. ej. un typo
+            # como `fijos.remuneracion`) se persiste como TEXTO y aquí hace
+            # reventar el recálculo. Sin este seguro, el arranque de FastAPI
+            # aborta y el servicio NO VUELVE A LEVANTAR NUNCA: el valor
+            # venenoso viaja dentro de la instantánea restaurada, así que
+            # reiniciar y redesplegar tampoco lo arreglan, y la única salida
+            # es editar la base a mano.
+            #
+            # Ante eso se prefiere arrancar con los valores de fábrica y
+            # decirlo, que es justo lo que promete el docstring de arriba:
+            # una configuración vieja nunca impide que el sistema arranque.
+            print(f"  ⚠ La configuración guardada no se pudo aplicar "
+                  f"({type(e).__name__}: {e}).")
+            print("    Se arranca con los valores referenciales de fábrica. "
+                  "Revise el panel de configuración y vuelva a guardar.")
+            for nombre, valores in fabrica.items():
+                _contenedor(nombre).clear()
+                _contenedor(nombre).update(valores)
+            costeo._refrescar_clases()
+            return 0, aplicados + ignorados
     return aplicados, ignorados

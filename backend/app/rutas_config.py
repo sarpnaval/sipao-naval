@@ -273,32 +273,59 @@ def guardar(cuerpo: GuardarConfig, bd: sqlite3.Connection = Depends(obtener_bd))
     if not cuerpo.cambios:
         raise HTTPException(400, "No hay cambios que guardar")
     antes = _indicadores()
-    aplicados = []
-    for c in cuerpo.cambios:
-        a, n = _aplicar(c)
-        aplicados.append({"seccion": c.seccion, "clave": c.clave,
-                          "campo": c.campo, "antes": a, "despues": n,
-                          "origen": c.origen, "fuente": c.fuente})
-    costeo._refrescar_clases()
-    despues = _indicadores()
 
-    ahora = datetime.now().isoformat(timespec="seconds")
-    # PERSISTIR el valor efectivo: sin esto, al reiniciar el sistema los
-    # parámetros volverían a fábrica y la bitácora quedaría mintiendo.
-    for x in aplicados:
-        config_persistente.guardar_valor(
-            bd, x["seccion"], x["clave"], x["campo"], x["despues"],
-            origen=x.get("origen"), fuente=x.get("fuente"))
-    for x in aplicados:
-        bd.execute(
-            """INSERT INTO configuracion_bitacora
-               (fecha_hora, seccion, clave, campo, valor_previo, valor_nuevo,
-                origen, fuente, motivo, responsable)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ahora, x["seccion"], x["clave"], x["campo"],
-             str(x["antes"]), str(x["despues"]), x["origen"], x["fuente"],
-             cuerpo.motivo, cuerpo.responsable or "configurador"))
-    bd.commit()
+    # TODO O NADA (corregido el 18-jul-2026)
+    # ---------------------------------------
+    # Antes se aplicaban los cambios uno por uno sin red: si el tercero de
+    # cinco violaba una validación, la API respondía 400 y la pantalla decía
+    # «no se guardó» — pero los dos primeros YA estaban aplicados en el
+    # estado global del proceso. Desde ese instante el tablero de mando
+    # servía cifras que nadie autorizó, a todos los usuarios a la vez, sin
+    # una sola fila de bitácora y sin nada persistido: al reiniciar
+    # desaparecía el rastro. Se midió un caso con el presupuesto del plan
+    # inflado un 34 % tras un guardado RECHAZADO.
+    #
+    # El endpoint hermano /impacto ya usaba este patrón; el que escribe de
+    # verdad, que es el que importa, no lo tenía.
+    instantanea = {s: copy.deepcopy(getattr(costeo, s.upper()))
+                   for s in ("parametros", "modelos", "operaciones", "tipos")}
+    try:
+        aplicados = []
+        for c in cuerpo.cambios:
+            a, n = _aplicar(c)
+            aplicados.append({"seccion": c.seccion, "clave": c.clave,
+                              "campo": c.campo, "antes": a, "despues": n,
+                              "origen": c.origen, "fuente": c.fuente})
+        costeo._refrescar_clases()
+        despues = _indicadores()
+
+        ahora = datetime.now().isoformat(timespec="seconds")
+        # PERSISTIR el valor efectivo: sin esto, al reiniciar el sistema los
+        # parámetros volverían a fábrica y la bitácora quedaría mintiendo.
+        for x in aplicados:
+            config_persistente.guardar_valor(
+                bd, x["seccion"], x["clave"], x["campo"], x["despues"],
+                origen=x.get("origen"), fuente=x.get("fuente"))
+        for x in aplicados:
+            bd.execute(
+                """INSERT INTO configuracion_bitacora
+                   (fecha_hora, seccion, clave, campo, valor_previo, valor_nuevo,
+                    origen, fuente, motivo, responsable)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ahora, x["seccion"], x["clave"], x["campo"],
+                 str(x["antes"]), str(x["despues"]), x["origen"], x["fuente"],
+                 cuerpo.motivo, cuerpo.responsable or "configurador"))
+        bd.commit()
+    except Exception:
+        # Cualquier fallo —validación, base de datos, lo que sea— deja el
+        # sistema exactamente como estaba. Si la pantalla dice «no se
+        # guardó», que sea verdad.
+        bd.rollback()
+        for seccion, valor in instantanea.items():
+            getattr(costeo, seccion.upper()).clear()
+            getattr(costeo, seccion.upper()).update(valor)
+        costeo._refrescar_clases()
+        raise
     # El respaldo lo dispara el middleware de main.py para TODA escritura que
     # sale bien. No se llama aquí a mano: tener dos mecanismos fue justo lo
     # que dejó sin respaldo a la importación y al registro directo, porque

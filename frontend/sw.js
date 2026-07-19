@@ -6,7 +6,7 @@
    ===================================================================== */
 "use strict";
 
-const VERSION = "sipao-v2.2.0";  // v2.2: la portada es el tablero de comando, no la cola de repuestos
+const VERSION = "sipao-v2.3.0";  // v2.3: guardado todo-o-nada y mensajes de error reales
 const SHELL_CACHE = "sarp-shell-" + VERSION;
 const API_CACHE = "sarp-api-" + VERSION;
 
